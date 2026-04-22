@@ -37,7 +37,8 @@ public class SecurityConfig {
                         // SWAGGER / OPENAPI (tanpa /api karena context-path)
                         "/v3/api-docs/**",
                         "/swagger-ui/**",
-                        "/swagger-ui.html"
+                        "/swagger-ui.html",
+                        "/users"
                 ).permitAll()
                 .anyRequest().authenticated()
         );
