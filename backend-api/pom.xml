@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- =========================================================
+         PARENT — Spring Boot 3.3.x (stabil, cocok untuk Java 21)
+         Hindari 4.x karena masih sangat baru & belum banyak referensi
+    ========================================================= -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.3.5</version>
+        <relativePath/>
+    </parent>
+
+    <!-- =========================================================
+         PROJECT IDENTITY
+    ========================================================= -->
+    <groupId>com.skripsi</groupId>
+    <artifactId>backend-api</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>backend-api</name>
+    <description>Backend API Algoritma Apriori</description>
+
+    <!-- =========================================================
+         PROPERTIES
+    ========================================================= -->
+    <properties>
+        <java.version>21</java.version>
+        <!-- Versi library dikelola di sini agar mudah di-upgrade -->
+        <jjwt.version>0.12.6</jjwt.version>
+        <poi.version>5.3.0</poi.version>
+        <mapstruct.version>1.6.2</mapstruct.version>
+    </properties>
+
+    <!-- =========================================================
+         DEPENDENCIES
+    ========================================================= -->
+    <dependencies>
+
+        <!-- ── SPRING CORE ──────────────────────────────────── -->
+
+        <!-- REST API -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!-- JPA / Hibernate untuk akses database -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <!-- Spring Security untuk autentikasi & otorisasi -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+
+        <!-- Validasi input (@NotNull, @Size, @Email, dll) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!-- ── DATABASE ─────────────────────────────────────── -->
+
+        <!-- MySQL JDBC Driver -->
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- ── AUTENTIKASI JWT ──────────────────────────────── -->
+        <!-- JJWT: library untuk generate & validasi JWT token  -->
+
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+            <version>${jjwt.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <version>${jjwt.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <version>${jjwt.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- ── EXCEL (APACHE POI) ───────────────────────────── -->
+        <!-- poi-ooxml untuk baca file .xlsx (format Excel modern) -->
+
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>${poi.version}</version>
+        </dependency>
+
+        <!-- ── MAPSTRUCT (DTO MAPPER) ───────────────────────── -->
+        <!-- Otomatis convert Entity <-> DTO tanpa boilerplate   -->
+
+        <dependency>
+            <groupId>org.mapstruct</groupId>
+            <artifactId>mapstruct</artifactId>
+            <version>${mapstruct.version}</version>
+        </dependency>
+
+        <!-- ── DEVELOPER TOOLS ──────────────────────────────── -->
+
+        <!-- DevTools: auto-restart saat ada perubahan kode -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-devtools</artifactId>
+            <scope>runtime</scope>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Lombok: @Getter, @Setter, @Builder, @Slf4j, dll -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- ── TESTING ──────────────────────────────────────── -->
+        <!-- Satu dependency ini sudah mencakup JUnit 5,
+             Mockito, AssertJ, MockMvc, dll                      -->
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+		<!-- Swagger UI / OpenAPI Documentation -->
+		<dependency>
+			<groupId>org.springdoc</groupId>
+			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+			<version>2.6.0</version>
+		</dependency>
+
+    </dependencies>
+
+    <!-- =========================================================
+         BUILD & PLUGINS
+    ========================================================= -->
+    <build>
+        <plugins>
+
+            <!-- Spring Boot Maven Plugin: untuk mvn spring-boot:run
+                 dan packaging jadi executable JAR               -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <!-- Lombok hanya dibutuhkan saat compile,
+                             tidak perlu ikut di dalam JAR final  -->
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+
+            <!-- Maven Compiler Plugin: konfigurasi annotation processor
+                 untuk Lombok dan MapStruct bekerja bersamaan          -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                    <annotationProcessorPaths>
+                        <!-- Lombok harus di atas MapStruct -->
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                        <path>
+                            <groupId>org.mapstruct</groupId>
+                            <artifactId>mapstruct-processor</artifactId>
+                            <version>${mapstruct.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+
+        </plugins>
+    </build>
+
+</project>

@@ -1,0 +1,121 @@
+# =============================================================
+# APPLICATION CONFIGURATION
+# Project  : Backend API Algoritma Apriori - Apotek
+# =============================================================
+
+server:
+  port: 8080
+  servlet:
+    context-path: /api   # semua endpoint diawali /api/...
+
+spring:
+
+  # -----------------------------------------------------------
+  # DATABASE — MySQL
+  # -----------------------------------------------------------
+  datasource:
+    url: jdbc:mysql://localhost:3306/apotik_v2?useSSL=false&serverTimezone=Asia/Jakarta&allowPublicKeyRetrieval=true&characterEncoding=UTF-8
+    username: root
+    password:                        # isi password MySQL Anda
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+    # HikariCP — connection pool bawaan Spring Boot
+    hikari:
+      pool-name: ApoticHikariPool
+      minimum-idle: 5               # koneksi minimum yang selalu standby
+      maximum-pool-size: 20         # maksimum koneksi bersamaan
+      idle-timeout: 300000          # 5 menit — buang koneksi idle
+      connection-timeout: 20000     # 20 detik — timeout saat ambil koneksi
+      max-lifetime: 1200000         # 20 menit — umur maksimum koneksi
+
+  # -----------------------------------------------------------
+  # JPA / HIBERNATE
+  # -----------------------------------------------------------
+  jpa:
+    hibernate:
+      # validate  : cek schema cocok dengan entity, TIDAK ubah DB
+      # update    : auto update schema (hindari di production)
+      # create    : hapus & buat ulang tabel setiap start (hanya dev)
+      # none      : tidak sentuh schema sama sekali
+      ddl-auto: validate
+    show-sql: false                  # ganti true jika ingin lihat query SQL di console
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true             # SQL di log lebih mudah dibaca
+        default_batch_fetch_size: 100
+
+  # -----------------------------------------------------------
+  # FILE UPLOAD (untuk import Excel)
+  # -----------------------------------------------------------
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 10MB           # maksimum ukuran 1 file
+      max-request-size: 10MB        # maksimum ukuran total request
+
+# =============================================================
+# KONFIGURASI CUSTOM APLIKASI
+# Nilai-nilai ini bisa diakses via @Value atau @ConfigurationProperties
+# =============================================================
+app:
+
+  # -----------------------------------------------------------
+  # JWT Authentication
+  # -----------------------------------------------------------
+  jwt:
+    # PENTING: ganti secret ini dengan string acak panjang (min 256-bit)
+    # Bisa generate di: https://generate-secret.vercel.app/64
+    secret: db96b6811a45dee3d0c1c6170f53d83a545f2f48c47c5ca6f8e396dc5daf0d41
+    expiration-ms: 86400000         # 24 jam dalam milidetik
+
+  # -----------------------------------------------------------
+  # Konfigurasi Upload File Excel
+  # -----------------------------------------------------------
+  upload:
+    allowed-extensions:
+      - .xlsx
+      - .xls
+    temp-dir: ${java.io.tmpdir}/apotek-uploads
+
+# =============================================================
+# SPRINGDOC / SWAGGER
+# =============================================================
+springdoc:
+  api-docs:
+    path: /v3/api-docs             # endpoint JSON schema OpenAPI
+  swagger-ui:
+    path: /swagger-ui.html         # URL untuk buka Swagger UI
+    operations-sorter: method      # urutkan endpoint by GET/POST/PUT/DELETE
+    tags-sorter: alpha             # urutkan tag secara alfabetis
+    display-request-duration: true # tampilkan durasi request
+  show-actuator: false
+
+  # -----------------------------------------------------------
+  # Konfigurasi CORS
+  # Sesuaikan allowed-origins dengan URL frontend Anda
+  # -----------------------------------------------------------
+  cors:
+    allowed-origins:
+      - http://localhost:3000        # React / Next.js dev server
+      - http://localhost:5173        # Vite dev server
+    allowed-methods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+      - OPTIONS
+
+# =============================================================
+# LOGGING
+# =============================================================
+logging:
+  file:
+    name: logs/app.log   # Lokasi dan nama file log
+  level:
+    root: INFO
+    com.skripsi.backend: DEBUG       # log detail untuk package kita sendiri
+    org.springframework.security: INFO
+    org.hibernate.SQL: INFO          # ganti DEBUG untuk lihat semua query
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
