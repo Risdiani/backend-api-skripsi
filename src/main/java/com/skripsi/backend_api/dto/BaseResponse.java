@@ -1,4 +1,4 @@
-package com.skripsi.backend_api.utils;
+package com.skripsi.backend_api.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -77,15 +77,7 @@ public class BaseResponse<T> implements Serializable {
 
     public static BaseResponse<String> notFound(String message) {
         return BaseResponse.<String>builder()
-                .status(404)
-                .success(false)
-                .message(message)
-                .build();
-    }
-
-    public static BaseResponse<String> tidakKetmu(String message) {
-        return BaseResponse.<String>builder()
-                .status(200)
+                .status(400)
                 .success(false)
                 .message(message)
                 .build();

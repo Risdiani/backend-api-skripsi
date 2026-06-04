@@ -1,14 +1,15 @@
 package com.skripsi.backend_api.service.user;
 
 import com.skripsi.backend_api.dto.user.request.UserRequest;
+import com.skripsi.backend_api.dto.user.response.UserResponse;
+import com.skripsi.backend_api.entity.Role;
 import com.skripsi.backend_api.entity.User;
-import com.skripsi.backend_api.repository.user.UserRepository;
+import com.skripsi.backend_api.repository.RoleRepository;
+import com.skripsi.backend_api.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 
@@ -18,99 +19,112 @@ import java.util.List;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
 
-    public Page<User> findAll(Pageable pageable) {
-        log.debug("Fetching all users dari database dengan pagination");
-        return userRepository.findAll(pageable);
+    private UserResponse toResponse(User u) {
+        return UserResponse.builder()
+                .id(u.getId())
+                .username(u.getUsername())
+                .email(u.getEmail())
+                .fullName(u.getFullName())
+                .phone(u.getPhone())
+                .role(u.getRole() == null ? null : u.getRole().getName())
+                .isActive(u.getIsActive())
+                .build();
     }
 
-    public User findByUsername(String username) {
-        log.debug("Fetching user dengan username: {}", username);
-        return userRepository.findByUsername(username)
-                .orElseThrow(() -> {
-                    log.warn("User tidak ditemukan dengan username: {}", username);
-                    return new IllegalArgumentException("User not found");
-                });
+    public List<UserResponse> findAll() {
+        log.info("UserService.findAll - fetching all users");
+        List<UserResponse> result = userRepository.findAll().stream().map(this::toResponse).toList();
+        log.info("UserService.findAll - total={}", result.size());
+        return result;
     }
 
-    public User findById(Long id) {
-        log.debug("Fetching user dengan ID: {}", id);
-        return userRepository.findById(id)
-                .orElseThrow(() -> {
-                    log.warn("User tidak ditemukan dengan ID: {}", id);
-                    return new IllegalArgumentException("User not found");
-                });
+    public UserResponse findById(Long id) {
+        log.info("UserService.findById - id={}", id);
+        User u = userRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        log.info("UserService.findById - found username={}", u.getUsername());
+        return toResponse(u);
     }
 
-    public User create(UserRequest req) {
-        log.info("Creating new user, username: {}", req.getUsername());
+    public UserResponse create(UserRequest req) {
+        log.info("UserService.create - username={}, email={}, roleId={}, isActive={}",
+                req.getUsername(), req.getEmail(), req.getRoleId(), req.getIsActive());
 
         if (userRepository.existsByUsername(req.getUsername())) {
-            log.warn("Username already used: {}", req.getUsername());
+            log.warn("UserService.create - username already used: {}", req.getUsername());
             throw new IllegalArgumentException("Username already used");
         }
         if (userRepository.existsByEmail(req.getEmail())) {
-            log.warn("Email already used: {}", req.getEmail());
+            log.warn("UserService.create - email already used: {}", req.getEmail());
             throw new IllegalArgumentException("Email already used");
         }
         if (req.getPassword() == null || req.getPassword().isBlank()) {
-            log.warn("Password is required untuk user: {}", req.getUsername());
+            log.warn("UserService.create - password is missing for username={}", req.getUsername());
             throw new IllegalArgumentException("Password is required");
         }
+        if (req.getRoleId() == null) {
+            log.warn("UserService.create - roleId is missing for username={}", req.getUsername());
+            throw new IllegalArgumentException("roleId is required");
+        }
+
+        Role role = roleRepository.findById(req.getRoleId())
+                .orElseThrow(() -> new IllegalArgumentException("Role not found"));
 
         User u = User.builder()
                 .username(req.getUsername())
-                .password(passwordEncoder.encode(req.getPassword()))
+                .password(passwordEncoder.encode(req.getPassword())) // jangan pernah log password
                 .email(req.getEmail())
                 .fullName(req.getFullName())
                 .phone(req.getPhone())
-                .role(req.getRole())
+                .role(role)
                 .isActive(req.getIsActive() == null ? true : req.getIsActive())
                 .build();
 
-        User savedUser = userRepository.save(u);
-        log.info("User berhasil dibuat dengan ID: {}", savedUser.getId());
-        return savedUser;
+        User saved = userRepository.save(u);
+        log.info("UserService.create - created id={}, username={}", saved.getId(), saved.getUsername());
+        return toResponse(saved);
     }
 
-    public User update(Long id, UserRequest req) {
-        log.info("Updating user dengan ID: {}", id);
-        User u = findById(id);
+    public UserResponse update(Long id, UserRequest req) {
+        log.info("UserService.update - id={}, username={}, email={}, roleId={}, isActive={}",
+                id, req.getUsername(), req.getEmail(), req.getRoleId(), req.getIsActive());
+
+        User u = userRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
         if (req.getEmail() != null && !req.getEmail().equals(u.getEmail())
                 && userRepository.existsByEmail(req.getEmail())) {
-            log.warn("Email already used: {}", req.getEmail());
+            log.warn("UserService.update - email already used: {}", req.getEmail());
             throw new IllegalArgumentException("Email already used");
         }
 
-        if (req.getUsername() != null) {
-            log.debug("Update username dari {} menjadi {}", u.getUsername(), req.getUsername());
-            u.setUsername(req.getUsername());
-        }
-        if (req.getEmail() != null) {
-            log.debug("Update email dari {} menjadi {}", u.getEmail(), req.getEmail());
-            u.setEmail(req.getEmail());
-        }
+        if (req.getUsername() != null) u.setUsername(req.getUsername());
+        if (req.getEmail() != null) u.setEmail(req.getEmail());
         if (req.getFullName() != null) u.setFullName(req.getFullName());
         if (req.getPhone() != null) u.setPhone(req.getPhone());
-        if (req.getRole() != null) u.setRole(req.getRole());
         if (req.getIsActive() != null) u.setIsActive(req.getIsActive());
 
+        if (req.getRoleId() != null) {
+            Role role = roleRepository.findById(req.getRoleId())
+                    .orElseThrow(() -> new IllegalArgumentException("Role not found"));
+            u.setRole(role);
+        }
+
         if (req.getPassword() != null && !req.getPassword().isBlank()) {
-            log.debug("Update password untuk user ID: {}", id);
             u.setPassword(passwordEncoder.encode(req.getPassword()));
         }
 
-        User updatedUser = userRepository.save(u);
-        log.info("User dengan ID: {} berhasil diupdate", id);
-        return updatedUser;
+        User saved = userRepository.save(u);
+        log.info("UserService.update - updated id={}, username={}", saved.getId(), saved.getUsername());
+        return toResponse(saved);
     }
 
     public void delete(Long id) {
-        log.info("Deleting user dengan ID: {}", id);
-        findById(id); // Validasi user ada
+        log.info("UserService.delete - id={}", id);
         userRepository.deleteById(id);
-        log.info("User dengan ID: {} berhasil dihapus", id);
+        log.info("UserService.delete - deleted id={}", id);
     }
 }

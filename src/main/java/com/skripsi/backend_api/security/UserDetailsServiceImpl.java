@@ -1,7 +1,10 @@
 package com.skripsi.backend_api.security;
 
 import com.skripsi.backend_api.entity.User;
-import com.skripsi.backend_api.repository.user.UserRepository;
+import com.skripsi.backend_api.repository.UserRepository;
+
+import lombok.RequiredArgsConstructor;
+
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.*;
@@ -10,13 +13,10 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 
 @Service
+@RequiredArgsConstructor
 public class UserDetailsServiceImpl implements UserDetailsService {
 
     private final UserRepository userRepository;
-
-    public UserDetailsServiceImpl(UserRepository userRepository) {
-        this.userRepository = userRepository;
-    }
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
@@ -27,11 +27,14 @@ public class UserDetailsServiceImpl implements UserDetailsService {
             throw new DisabledException("User is inactive");
         }
 
-        String role = (u.getRole() == null) ? "USER" : u.getRole().name().toUpperCase();
+        String roleName = (u.getRole() == null || u.getRole().getName() == null)
+                ? "STAFF"
+                : u.getRole().getName().toUpperCase();
+
         return new org.springframework.security.core.userdetails.User(
                 u.getUsername(),
                 u.getPassword(),
-                List.of(new SimpleGrantedAuthority("ROLE_" + role))
+                List.of(new SimpleGrantedAuthority("ROLE_" + roleName))
         );
     }
 }
