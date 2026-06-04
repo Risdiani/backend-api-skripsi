@@ -1,4 +1,4 @@
-package com.skripsi.backend_api.repository.user;
+package com.skripsi.backend_api.repository;
 
 import com.skripsi.backend_api.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
