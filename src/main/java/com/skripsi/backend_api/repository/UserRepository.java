@@ -1,6 +1,8 @@
 package com.skripsi.backend_api.repository;
 
 import com.skripsi.backend_api.entity.User;
+
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;
@@ -9,4 +11,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByUsername(String username);
     boolean existsByUsername(String username);
     boolean existsByEmail(String email);
+
+    @EntityGraph(attributePaths = {"role"})
+    Optional<User> findWithRoleByUsername(String username);
 }

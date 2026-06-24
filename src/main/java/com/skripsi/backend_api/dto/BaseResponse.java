@@ -2,6 +2,8 @@ package com.skripsi.backend_api.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.skripsi.backend_api.dto.excelimportlog.response.ExcelImportLogRes;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -57,6 +59,15 @@ public class BaseResponse<T> implements Serializable {
                 .success(true)
                 .build();
     }
+
+    public static BaseResponse<ExcelImportLogRes> ok(String message, ExcelImportLogRes data) {
+        return BaseResponse.<ExcelImportLogRes>builder()
+                .status(200)
+                .data(data)
+                .message(message)
+                .success(true)
+                .build();
+}
 
     public static BaseResponse<String> error(String message) {
         return BaseResponse.<String>builder()

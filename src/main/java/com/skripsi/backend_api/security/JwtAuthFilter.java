@@ -4,6 +4,8 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -13,6 +15,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 
+@Slf4j
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
 
@@ -32,9 +35,16 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
 
+        String path = request.getServletPath();
         String authorizationHeader = request.getHeader("Authorization");
 
+        log.info("JwtAuthFilter hit path={}, hasAuthHeader={}, authPrefix={}",
+                path,
+                authorizationHeader != null,
+                authorizationHeader != null && authorizationHeader.startsWith("Bearer ") ? "Bearer" : "none");
+
         if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
+            log.info("JwtAuthFilter skip: no bearer token");
             filterChain.doFilter(request, response);
             return;
         }
@@ -46,6 +56,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             String jti = jwtService.extractJti(token);
 
             if (tokenBlacklistService.isRevoked(jti)) {
+                log.warn("JwtAuthFilter rejected: token revoked, jti={}", jti);
                 response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Token revoked");
                 return;
             }
@@ -59,9 +70,14 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
                     authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authentication);
+                    log.info("JWT authenticated: user={}, authorities={}", username, userDetails.getAuthorities());
+                } else {
+                    log.warn("JwtAuthFilter: token invalid for user={}", username);
                 }
             }
+
         } catch (Exception ex) {
+            log.error("JwtAuthFilter exception", ex);
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Invalid token");
             return;
         }

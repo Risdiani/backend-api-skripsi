@@ -1,5 +1,6 @@
 package com.skripsi.backend_api.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.skripsi.backend_api.utils.Status;
 import jakarta.persistence.*;
 import lombok.*;
@@ -60,6 +61,7 @@ public class ExcelImportLog {
     // ── Relasi ke User ────────────────────────────────────────
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "imported_by", referencedColumnName = "id")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
     private User importedBy;
  
     // ── Enum Status ───────────────────────────────────────────
