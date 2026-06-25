@@ -7,5 +7,8 @@ public enum Status {
     FAILED,
     PROCESSING,
     SUCCESS,
-    PARTIAL
+    PARTIAL,
+    KELUAR,
+    MASUK,
+    REFUND
 }
