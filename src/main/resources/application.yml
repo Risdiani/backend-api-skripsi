@@ -89,6 +89,7 @@ springdoc:
     operations-sorter: method      # urutkan endpoint by GET/POST/PUT/DELETE
     tags-sorter: alpha             # urutkan tag secara alfabetis
     display-request-duration: true # tampilkan durasi request
+    custom-css-url: /api/swagger-custom.css  # blue color palette theme
   show-actuator: false
 
   # -----------------------------------------------------------

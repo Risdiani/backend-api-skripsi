@@ -1,0 +1,233 @@
+/* ====================================================
+   Swagger UI — Blue Color Palette Custom Theme
+   ==================================================== */
+
+/* --- Top Header Bar --- */
+.swagger-ui .topbar {
+  background: linear-gradient(135deg, #0f3460 0%, #1a6bb5 60%, #1e90ff 100%);
+  box-shadow: 0 2px 12px rgba(30, 144, 255, 0.35);
+}
+
+.swagger-ui .topbar .download-url-wrapper .select-label select,
+.swagger-ui .topbar .download-url-wrapper input[type=text] {
+  border-color: #1e90ff;
+  background: rgba(15, 52, 96, 0.6);
+  color: #e0f0ff;
+}
+
+.swagger-ui .topbar-wrapper img {
+  content: none;
+}
+
+/* --- Info Section Title --- */
+.swagger-ui .info .title {
+  color: #0f3460;
+  font-weight: 700;
+}
+
+.swagger-ui .info a {
+  color: #1a6bb5;
+}
+
+/* --- Operation blocks: color by HTTP method (blue palette) --- */
+.swagger-ui .opblock.opblock-get {
+  background: rgba(30, 144, 255, 0.07);
+  border-color: #1e90ff;
+}
+.swagger-ui .opblock.opblock-get .opblock-summary-method {
+  background: #1e90ff;
+}
+
+.swagger-ui .opblock.opblock-post {
+  background: rgba(15, 52, 96, 0.08);
+  border-color: #0f3460;
+}
+.swagger-ui .opblock.opblock-post .opblock-summary-method {
+  background: #0f3460;
+}
+
+.swagger-ui .opblock.opblock-put {
+  background: rgba(26, 107, 181, 0.09);
+  border-color: #1a6bb5;
+}
+.swagger-ui .opblock.opblock-put .opblock-summary-method {
+  background: #1a6bb5;
+}
+
+.swagger-ui .opblock.opblock-delete {
+  background: rgba(30, 80, 150, 0.09);
+  border-color: #1e5096;
+}
+.swagger-ui .opblock.opblock-delete .opblock-summary-method {
+  background: #1e5096;
+}
+
+.swagger-ui .opblock.opblock-patch {
+  background: rgba(0, 120, 212, 0.09);
+  border-color: #0078d4;
+}
+.swagger-ui .opblock.opblock-patch .opblock-summary-method {
+  background: #0078d4;
+}
+
+/* --- Tags / Section headers --- */
+.swagger-ui .opblock-tag {
+  border-bottom: 2px solid #1e90ff;
+  color: #0f3460;
+  font-weight: 700;
+}
+
+.swagger-ui .opblock-tag:hover {
+  background: rgba(30, 144, 255, 0.06);
+}
+
+/* --- Buttons --- */
+.swagger-ui .btn.authorize {
+  background: #1e90ff;
+  border-color: #1a6bb5;
+  color: #fff;
+  font-weight: 600;
+  border-radius: 6px;
+  transition: background 0.2s ease;
+}
+
+.swagger-ui .btn.authorize:hover {
+  background: #1a6bb5;
+  border-color: #0f3460;
+}
+
+.swagger-ui .btn.authorize svg {
+  fill: #fff;
+}
+
+.swagger-ui .btn.execute {
+  background: linear-gradient(135deg, #1e90ff, #1a6bb5);
+  border-color: transparent;
+  color: #fff;
+  font-weight: 600;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(30, 144, 255, 0.35);
+}
+
+.swagger-ui .btn.execute:hover {
+  background: linear-gradient(135deg, #1a6bb5, #0f3460);
+  box-shadow: 0 4px 14px rgba(30, 144, 255, 0.5);
+  transform: translateY(-1px);
+}
+
+.swagger-ui .btn {
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.swagger-ui .btn-clear {
+  color: #1e90ff;
+  border-color: #1e90ff;
+}
+
+/* --- Response codes --- */
+.swagger-ui .responses-inner h4,
+.swagger-ui .responses-inner h5 {
+  color: #0f3460;
+}
+
+/* --- Model section --- */
+.swagger-ui section.models {
+  border-color: #1e90ff;
+}
+
+.swagger-ui section.models.is-open h4 {
+  border-bottom: 2px solid #1e90ff;
+  color: #0f3460;
+}
+
+.swagger-ui .model-title {
+  color: #1a6bb5;
+  font-weight: 600;
+}
+
+/* --- Scheme / Server selector --- */
+.swagger-ui .scheme-container {
+  background: #f0f7ff;
+  box-shadow: 0 1px 4px rgba(30, 144, 255, 0.15);
+}
+
+/* --- Tab active indicator --- */
+.swagger-ui .tab li.tabitem.active h4 span {
+  color: #1e90ff;
+}
+
+.swagger-ui .tab li.tabitem.active h4 span::after {
+  background: #1e90ff;
+}
+
+/* --- Response body & code blocks --- */
+.swagger-ui .microlight {
+  background: #f0f7ff;
+  border-left: 3px solid #1e90ff;
+  border-radius: 4px;
+}
+
+/* --- Links --- */
+.swagger-ui a {
+  color: #1a6bb5;
+  transition: color 0.2s ease;
+}
+
+.swagger-ui a:hover {
+  color: #1e90ff;
+}
+
+/* --- Input fields --- */
+.swagger-ui input[type=text],
+.swagger-ui input[type=password],
+.swagger-ui textarea,
+.swagger-ui select {
+  border: 1px solid #b0d0f0;
+  border-radius: 4px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.swagger-ui input[type=text]:focus,
+.swagger-ui input[type=password]:focus,
+.swagger-ui textarea:focus,
+.swagger-ui select:focus {
+  border-color: #1e90ff;
+  box-shadow: 0 0 0 3px rgba(30, 144, 255, 0.18);
+  outline: none;
+}
+
+/* --- Authorization dialog --- */
+.swagger-ui .dialog-ux .modal-ux-header {
+  background: linear-gradient(135deg, #0f3460, #1a6bb5);
+  color: #fff;
+  border-radius: 8px 8px 0 0;
+}
+
+.swagger-ui .dialog-ux .modal-ux-header h3 {
+  color: #fff;
+}
+
+.swagger-ui .dialog-ux .modal-ux-content h4 {
+  color: #0f3460;
+}
+
+/* --- Scrollbar (Webkit) --- */
+.swagger-ui ::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+.swagger-ui ::-webkit-scrollbar-track {
+  background: #eaf3ff;
+}
+
+.swagger-ui ::-webkit-scrollbar-thumb {
+  background: #1a6bb5;
+  border-radius: 4px;
+}
+
+.swagger-ui ::-webkit-scrollbar-thumb:hover {
+  background: #0f3460;
+}
