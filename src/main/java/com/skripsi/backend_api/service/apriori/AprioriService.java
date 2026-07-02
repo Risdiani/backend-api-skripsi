@@ -167,46 +167,114 @@ public class AprioriService {
             log.warn("Total transaksi adalah 0. Mengembalikan list kosong untuk Aturan Asosiasi.");
             return Collections.emptyList();
         }
+        
         List<AprioriRuleRes> rules = new ArrayList<>();
-        log.info("Mencari Itemset 2 yang lolos untuk dijadikan antecedent dan consequent...");
-        List<AprioriItemsetRes> itemset2 = hitungItemset2(req);
-        List<AprioriItemsetRes> lolosItemset2 = itemset2.stream()
+        // 1. Cek Itemset 3 terlebih dahulu
+        log.info("Memeriksa Itemset 3...");
+        List<AprioriItemsetRes> itemset3 = hitungItemset3(req);
+        List<AprioriItemsetRes> lolosItemset3 = itemset3.stream()
                 .filter(i -> i.getKeterangan().equals("Lolos")).toList();
-
-        log.info("Ditemukan {} pasangan Itemset 2 yang lolos.", lolosItemset2.size());
-        List<AprioriItemsetRes> itemset1 = hitungItemset1(req);
-        Map<String, Integer> itemset1Counts = new HashMap<>();
-        for (AprioriItemsetRes res : itemset1) {
-            itemset1Counts.put(res.getItem(), res.getJumlah());
-        }
-        for (AprioriItemsetRes i2 : lolosItemset2) {
-            String[] items = i2.getItem().split(", ");
-            String itemA = items[0];
-            String itemB = items[1];
-            int countAB = i2.getJumlah();
-            // Confidence A -> B
-            int countA = itemset1Counts.getOrDefault(itemA, 0);
-            if (countA > 0) {
-                double confAB = ((double) countAB / countA) * 100;
-                rules.add(AprioriRuleRes.builder()
-                        .antecedent(itemA)
-                        .consequent(itemB)
-                        .confidence(confAB)
-                        .keterangan(confAB >= req.getMinConfidence() ? "Lolos" : "Tidak Lolos")
-                        .build());
+        if (!lolosItemset3.isEmpty()) {
+            log.info("Ditemukan {} kombinasi Itemset 3 yang lolos. Membentuk Aturan dari Itemset 3 (A&B -> C).", lolosItemset3.size());
+            
+            // Kita butuh data jumlah kemunculan dari Itemset 2 untuk membagi support (count antecedent)
+            List<AprioriItemsetRes> itemset2 = hitungItemset2(req);
+            Map<String, Integer> itemset2Counts = new HashMap<>();
+            for (AprioriItemsetRes res : itemset2) {
+                itemset2Counts.put(res.getItem(), res.getJumlah());
             }
-            // Confidence B -> A
-            int countB = itemset1Counts.getOrDefault(itemB, 0);
-            if (countB > 0) {
-                double confBA = ((double) countAB / countB) * 100;
-                rules.add(AprioriRuleRes.builder()
-                        .antecedent(itemB)
-                        .consequent(itemA)
-                        .confidence(confBA)
-                        .keterangan(confBA >= req.getMinConfidence() ? "Lolos" : "Tidak Lolos")
-                        .build());
+            for (AprioriItemsetRes i3 : lolosItemset3) {
+                String[] items = i3.getItem().split(", ");
+                // items selalu berurutan karena Arrays.sort() di hitungItemset3
+                String itemA = items[0];
+                String itemB = items[1];
+                String itemC = items[2];
+                int countABC = i3.getJumlah(); // Jumlah kemunculan (A, B, dan C) bersamaan
+                // Confidence 1: A & B -> C
+                String antecedentAB = itemA + ", " + itemB;
+                int countAB = itemset2Counts.getOrDefault(antecedentAB, 0);
+                if (countAB > 0) {
+                    double conf = ((double) countABC / countAB) * 100;
+                    rules.add(AprioriRuleRes.builder()
+                            .antecedent(antecedentAB)
+                            .consequent(itemC)
+                            .confidence(conf)
+                            .keterangan(conf >= req.getMinConfidence() ? "Lolos" : "Tidak Lolos")
+                            .build());
+                }
+                // Confidence 2: A & C -> B
+                String antecedentAC = itemA + ", " + itemC;
+                int countAC = itemset2Counts.getOrDefault(antecedentAC, 0);
+                if (countAC > 0) {
+                    double conf = ((double) countABC / countAC) * 100;
+                    rules.add(AprioriRuleRes.builder()
+                            .antecedent(antecedentAC)
+                            .consequent(itemB)
+                            .confidence(conf)
+                            .keterangan(conf >= req.getMinConfidence() ? "Lolos" : "Tidak Lolos")
+                            .build());
+                }
+                // Confidence 3: B & C -> A
+                String antecedentBC = itemB + ", " + itemC;
+                int countBC = itemset2Counts.getOrDefault(antecedentBC, 0);
+                if (countBC > 0) {
+                    double conf = ((double) countABC / countBC) * 100;
+                    rules.add(AprioriRuleRes.builder()
+                            .antecedent(antecedentBC)
+                            .consequent(itemA)
+                            .confidence(conf)
+                            .keterangan(conf >= req.getMinConfidence() ? "Lolos" : "Tidak Lolos")
+                            .build());
+                }
+            }
+        } else {
+            log.info("Itemset 3 tidak ada yang lolos. Membentuk Aturan Asosiasi dari Itemset 2 (A -> B)...");
+            List<AprioriItemsetRes> itemset2 = hitungItemset2(req);
+            List<AprioriItemsetRes> lolosItemset2 = itemset2.stream()
+                    .filter(i -> i.getKeterangan().equals("Lolos")).toList();
+                    
+            if (!lolosItemset2.isEmpty()) {
+                log.info("Ditemukan {} pasangan Itemset 2 yang lolos.", lolosItemset2.size());
+                
+                // Butuh data count itemset 1 untuk pembagi (count antecedent)
+                List<AprioriItemsetRes> itemset1 = hitungItemset1(req);
+                Map<String, Integer> itemset1Counts = new HashMap<>();
+                for (AprioriItemsetRes res : itemset1) {
+                    itemset1Counts.put(res.getItem(), res.getJumlah());
+                }
+                for (AprioriItemsetRes i2 : lolosItemset2) {
+                    String[] items = i2.getItem().split(", ");
+                    String itemA = items[0];
+                    String itemB = items[1];
+                    int countAB = i2.getJumlah();
+                    // Confidence A -> B
+                    int countA = itemset1Counts.getOrDefault(itemA, 0);
+                    if (countA > 0) {
+                        double confAB = ((double) countAB / countA) * 100;
+                        rules.add(AprioriRuleRes.builder()
+                                .antecedent(itemA)
+                                .consequent(itemB)
+                                .confidence(confAB)
+                                .keterangan(confAB >= req.getMinConfidence() ? "Lolos" : "Tidak Lolos")
+                                .build());
+                    }
+                    // Confidence B -> A
+                    int countB = itemset1Counts.getOrDefault(itemB, 0);
+                    if (countB > 0) {
+                        double confBA = ((double) countAB / countB) * 100;
+                        rules.add(AprioriRuleRes.builder()
+                                .antecedent(itemB)
+                                .consequent(itemA)
+                                .confidence(confBA)
+                                .keterangan(confBA >= req.getMinConfidence() ? "Lolos" : "Tidak Lolos")
+                                .build());
+                    }
+                }
+            } else {
+                log.warn("Itemset 2 juga tidak ada yang lolos. Tidak ada aturan asosiasi yang dapat dibentuk.");
             }
         }
+        // Urutkan berdasarkan nilai confidence tertinggi ke terendah
         rules.sort((r1, r2) -> Double.compare(r2.getConfidence(), r1.getConfidence()));
         log.info("Berhasil membentuk {} Aturan Asosiasi.", rules.size());
         return rules;
