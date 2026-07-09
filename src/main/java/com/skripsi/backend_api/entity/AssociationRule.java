@@ -1,6 +1,8 @@
 package com.skripsi.backend_api.entity;
 
 import com.skripsi.backend_api.utils.Korelasi;
+import com.skripsi.backend_api.utils.KorelasiConverter;
+
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -64,7 +66,7 @@ public class AssociationRule {
     @Builder.Default
     private Boolean lolosFilter = false;
  
-    @Enumerated(EnumType.STRING)
+    @Convert(converter = KorelasiConverter.class)
     @Column(length = 15)
     private Korelasi korelasi;
  

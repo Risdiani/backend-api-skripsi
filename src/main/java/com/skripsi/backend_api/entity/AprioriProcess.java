@@ -1,6 +1,8 @@
 package com.skripsi.backend_api.entity;
 
 import com.skripsi.backend_api.utils.Status;
+import com.skripsi.backend_api.utils.StatusConverter;
+
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -41,7 +43,7 @@ public class AprioriProcess {
     @Column(name = "total_transaksi")
     private Integer totalTransaksi;
  
-    @Enumerated(EnumType.STRING)
+    @Convert(converter = StatusConverter.class)
     @Column(nullable = false, length = 10)
     @Builder.Default
     private Status status = Status.PENDING;
