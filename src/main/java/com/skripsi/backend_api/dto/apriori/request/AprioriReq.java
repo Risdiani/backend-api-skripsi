@@ -6,6 +6,7 @@ import java.time.LocalDate;
 
 @Data
 public class AprioriReq {
+    private Long processId;
     private Double minSupport; // Contoh: 20.0 untuk 20%
     private Double minConfidence; // Contoh: 50.0 untuk 50%
 

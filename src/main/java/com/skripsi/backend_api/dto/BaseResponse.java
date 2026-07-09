@@ -12,6 +12,8 @@ import lombok.NoArgsConstructor;
 import java.io.Serializable;
 import java.util.List;
 
+import org.springframework.data.domain.Page;
+
 @Data
 @Builder
 @NoArgsConstructor
@@ -115,6 +117,16 @@ public class BaseResponse<T> implements Serializable {
         return BaseResponse.<Object>builder()
                 .status(status)
                 .success(success)
+                .message(message)
+                .data(data)
+                .build();
+    }
+
+    public static <T> BaseResponse<Object> page(String message, Page<?> data){
+        return BaseResponse.
+                <Object>builder()
+                .status(200)
+                .success(true)
                 .message(message)
                 .data(data)
                 .build();
