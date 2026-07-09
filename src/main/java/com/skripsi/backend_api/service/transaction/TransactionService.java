@@ -4,12 +4,14 @@ import com.skripsi.backend_api.dto.transaction.request.TransactionReq;
 import com.skripsi.backend_api.dto.transaction.response.TransactionRes;
 import com.skripsi.backend_api.dto.transactiondetail.request.TransactionDetailReq;
 import com.skripsi.backend_api.dto.transactiondetail.response.TransactionDetailRes;
+import com.skripsi.backend_api.dto.BaseResponse;
 import com.skripsi.backend_api.dto.excelimportlog.response.ExcelImportLogRes;
 import com.skripsi.backend_api.entity.*;
 import com.skripsi.backend_api.repository.*;
 import com.skripsi.backend_api.service.excelimportlog.ExcelImportLogService;
 import com.skripsi.backend_api.utils.AuthContext;
 import com.skripsi.backend_api.utils.SumberData;
+import com.skripsi.backend_api.utils.TransactionCodeGenerator;
 import com.skripsi.backend_api.utils.Status;
 
 import lombok.RequiredArgsConstructor;
@@ -19,6 +21,12 @@ import org.apache.poi.ss.usermodel.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
+import jakarta.persistence.criteria.Predicate;
 
 import java.io.InputStream;
 import java.math.BigDecimal;
@@ -41,13 +49,24 @@ public class TransactionService {
     private final AuthContext authContext;
     private final ExcelImportLogService excelImportLogService;
     private final StokMutasiRepository stokMutasiRepository;
+    private final TransactionCodeGenerator transactionCodeGenerator;
 
-    public List<TransactionRes> findAll() {
-        return transactionRepository.findAll().stream().map(this::toResponse).toList();
+    public Page<TransactionRes> findAllPage(LocalDate tglAwal, LocalDate tglAkhir, Integer page, Integer size) {
+        log.info("[Start service findAllPage Transaction]");
+
+        int safePage = page == null || page < 0 ? 0 : page;
+        int safeSize = size == null || size < 1 ? 10 : size;
+        Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by("createdAt").descending());
+
+        Page<Transaction> daftar = transactionRepository.findAll(criteria(tglAwal, tglAkhir), pageable);
+        Page<TransactionRes> mappedPage = daftar.map(this::toResponse);
+
+        log.info("[End service findAllPage Transaction]");
+        return mappedPage;
     }
 
-    public TransactionRes findById(Long id) {
-        Transaction transaction = transactionRepository.findById(id)
+    public TransactionRes findByKodeTransaksi(String kodeTransaksi) {
+        Transaction transaction = transactionRepository.findByKodeTransaksi(kodeTransaksi)
                 .orElseThrow(() -> new IllegalArgumentException("Transaksi tidak ditemukan"));
         return toResponse(transaction);
     }
@@ -217,81 +236,113 @@ public class TransactionService {
         }
     }
 
+    public BaseResponse<Object> previewTransaction(TransactionReq req) {
+        if (req == null || req.getDetails() == null || req.getDetails().isEmpty()) {
+            throw new IllegalArgumentException("Detail transaksi wajib diisi");
+        }
+
+        BigDecimal total = BigDecimal.ZERO;
+        List<TransactionDetailRes> detailResult = new ArrayList<>();
+
+        for (TransactionDetailReq detailReq : req.getDetails()) {
+            Product product = productRepository.findByKodeProduk(detailReq.getKodeProduk())
+                    .orElseThrow(() -> new IllegalArgumentException("Produk tidak ditemukan: " + detailReq.getKodeProduk()));
+
+            BigDecimal hargaSatuan = detailReq.getHargaSatuan() != null
+                    ? detailReq.getHargaSatuan()
+                    : product.getHarga();
+
+            int jumlah = detailReq.getJumlah() != null ? detailReq.getJumlah() : 1;
+            BigDecimal subtotal = hargaSatuan.multiply(BigDecimal.valueOf(jumlah));
+            total = total.add(subtotal);
+
+            detailResult.add(TransactionDetailRes.builder()
+                    .id(detailReq.getId())
+                    .produkId(product.getId())
+                    .kodeProduk(product.getKodeProduk())
+                    .namaProduk(product.getNamaProduk())
+                    .jumlah(jumlah)
+                    .hargaSatuan(hargaSatuan)
+                    .subtotal(subtotal)
+                    .build());
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("kodeTransaksi", req.getKodeTransaksi());
+        result.put("transactionDate", req.getTransactionDate() != null ? req.getTransactionDate() : LocalDate.now());
+        result.put("catatan", req.getCatatan());
+        result.put("totalHarga", total);
+        result.put("details", detailResult);
+
+        return BaseResponse.ok("Total transaksi berhasil dihitung", result);
+    }
+
     @Transactional
     public TransactionRes createTransaction(TransactionReq req) {
-        if (transactionRepository.existsByKodeTransaksi(req.getKodeTransaksi())) {
-            throw new IllegalArgumentException("Kode transaksi sudah ada");
-        }
+        LocalDate transactionDate = req.getTransactionDate() != null ? req.getTransactionDate() : LocalDate.now();
+        String generatedKodeTransaksi = transactionCodeGenerator.generate(transactionDate);
+
         Transaction transaction = Transaction.builder()
-                .kodeTransaksi(req.getKodeTransaksi())
-                .transactionDate(req.getTransactionDate() != null ? req.getTransactionDate() : LocalDate.now())
+                .kodeTransaksi(generatedKodeTransaksi)
+                .transactionDate(transactionDate)
                 .catatan(req.getCatatan())
                 .sumberData(SumberData.manual)
                 .totalHarga(BigDecimal.ZERO)
                 .build();
+
         String currentUsername = authContext.getCurrentUsername();
         if (currentUsername != null) {
             transaction.setImportedBy(userRepository.findByUsername(currentUsername).orElse(null));
         }
+
         BigDecimal total = BigDecimal.ZERO;
+        List<StokMutasi> stokMutasiList = new ArrayList<>();
+
         for (TransactionDetailReq detailReq : req.getDetails()) {
             Product product = productRepository.findByKodeProduk(detailReq.getKodeProduk())
-                    .orElseThrow(
-                            () -> new IllegalArgumentException("Produk tidak ditemukan: " + detailReq.getKodeProduk()));
-            if (product.getStokTersedia() < detailReq.getJumlah()) {
+                    .orElseThrow(() -> new IllegalArgumentException("Produk tidak ditemukan: " + detailReq.getKodeProduk()));
+
+            int jumlah = detailReq.getJumlah() != null ? detailReq.getJumlah() : 1;
+            if (product.getStokTersedia() < jumlah) {
                 throw new IllegalArgumentException("Stok tidak mencukupi untuk produk: " + product.getNamaProduk());
             }
-            BigDecimal hargaSatuan = detailReq.getHargaSatuan() != null ? detailReq.getHargaSatuan()
-                    : product.getHarga();
-            BigDecimal subtotal = hargaSatuan.multiply(BigDecimal.valueOf(detailReq.getJumlah()));
+
+            BigDecimal hargaSatuan = detailReq.getHargaSatuan() != null ? detailReq.getHargaSatuan() : product.getHarga();
+            BigDecimal subtotal = hargaSatuan.multiply(BigDecimal.valueOf(jumlah));
+
             TransactionDetail detail = TransactionDetail.builder()
                     .produk(product)
-                    .jumlah(detailReq.getJumlah())
+                    .jumlah(jumlah)
                     .hargaSatuan(hargaSatuan)
                     .subtotal(subtotal)
                     .build();
+
             transaction.addDetail(detail);
             total = total.add(subtotal);
-            // Perhitungan Stok
-            int stokSebelum = product.getStokTersedia();
-            int qtyKeluar = detailReq.getJumlah();
-            int stokSesudah = stokSebelum - qtyKeluar;
 
-            // Update stok produk
+            int stokSebelum = product.getStokTersedia();
+            int stokSesudah = stokSebelum - jumlah;
             product.setStokTersedia(stokSesudah);
             productRepository.save(product);
-            // Simpan riwayat Stok Mutasi dengan status KELUAR
-            StokMutasi stokMutasi = StokMutasi.builder()
+
+            stokMutasiList.add(StokMutasi.builder()
                     .produk(product)
                     .transaksiDetail(detail)
                     .tipe(Status.KELUAR.name())
-                    .qty(qtyKeluar)
+                    .qty(jumlah)
                     .stokSebelum(stokSebelum)
                     .stokSesudah(stokSesudah)
-                    .keterangan("Penjualan pada Transaksi " + transaction.getKodeTransaksi())
-                    .build();
-            // Akan kita save setelah Transaction disave, supaya transaksiDetail terhubung
+                    .keterangan("Penjualan pada Transaksi " + generatedKodeTransaksi)
+                    .build());
         }
+
         transaction.setTotalHarga(total);
         Transaction savedTransaction = transactionRepository.save(transaction);
-        // Save mutasi setelah transaksi tersimpan (agar relasi TransactionDetail
-        // memiliki ID)
-        for (TransactionDetail td : savedTransaction.getDetails()) {
-            // Insert mutasi sesuai dengan transaksiDetail
-            StokMutasi mutasi = StokMutasi.builder()
-                    .produk(td.getProduk())
-                    .transaksiDetail(td)
-                    .tipe(Status.KELUAR.name())
-                    .qty(td.getJumlah())
-                    .stokSebelum(td.getProduk().getStokTersedia() + td.getJumlah())
-                    .stokSesudah(td.getProduk().getStokTersedia())
-                    .keterangan("Penjualan pada Transaksi " + savedTransaction.getKodeTransaksi())
-                    .build();
-            // Kita memerlukan repository mutasi
-            // (Komentar ini akan diperbaiki, pastikan Anda punya stokMutasiRepository
-            // di-inject)
+
+        for (StokMutasi mutasi : stokMutasiList) {
             stokMutasiRepository.save(mutasi);
         }
+
         return toResponse(savedTransaction);
     }
 
@@ -448,6 +499,23 @@ public class TransactionService {
     }
 
     // ─── Helper methods ──────────────────────────────────────────────────────
+
+    // Membuat Specification untuk filter tanggal transaksi
+    private Specification<Transaction> criteria(LocalDate tglAwal, LocalDate tglAkhir) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+
+            if (tglAwal != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("transactionDate"), tglAwal));
+            }
+
+            if (tglAkhir != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("transactionDate"), tglAkhir));
+            }
+
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+    }
 
     private TransactionRes toResponse(Transaction t) {
         List<TransactionDetailRes> detailResList = t.getDetails().stream().map(d -> TransactionDetailRes.builder()
