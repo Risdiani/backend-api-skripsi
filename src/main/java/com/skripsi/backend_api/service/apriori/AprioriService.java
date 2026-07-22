@@ -330,6 +330,7 @@ public class AprioriService {
 
         for (Map.Entry<String, Integer> entry : countMap.entrySet()) {
             double support = ((double) entry.getValue() / totalTx) * 100;
+            support = Math.round(support * 100.0) / 100.0;
 
             result.add(AprioriItemsetRes.builder()
                     .item(entry.getKey())
@@ -484,6 +485,12 @@ public class AprioriService {
         double confidence = ((double) supportCountXy / supportCountX) * 100;
         double supportY = ((double) supportCountY / totalTx) * 100;
         double lift = supportY == 0 ? 0D : confidence / supportY;
+
+        support = Math.round(support * 100.0) / 100.0;
+        confidence = Math.round(confidence * 100.0) / 100.0;
+        supportY = Math.round(supportY * 100.0) / 100.0;
+        lift = Math.round(lift * 100.0) / 100.0;
+
         boolean lolosFilter = support >= req.getMinSupport() && confidence >= req.getMinConfidence();
 
         Korelasi korelasi;
