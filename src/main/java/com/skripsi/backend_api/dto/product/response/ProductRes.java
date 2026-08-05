@@ -18,6 +18,7 @@ public class ProductRes {
     private String satuan;
     private BigDecimal harga;
     private Boolean isActive;
+    private Integer stokTersedia;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

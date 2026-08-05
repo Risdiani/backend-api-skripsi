@@ -15,5 +15,6 @@ public class ProductReq {
     private Long kategoriId;
     private String satuan;
     private BigDecimal harga;
+    private Integer stokTersedia;
     private Boolean isActive;
 }

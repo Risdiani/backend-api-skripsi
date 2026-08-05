@@ -9,6 +9,7 @@ import com.skripsi.backend_api.dto.excelimportlog.response.ExcelImportLogRes;
 import com.skripsi.backend_api.entity.*;
 import com.skripsi.backend_api.repository.*;
 import com.skripsi.backend_api.service.excelimportlog.ExcelImportLogService;
+import com.skripsi.backend_api.service.stokmutasi.StokMutasiService;
 import com.skripsi.backend_api.utils.AuthContext;
 import com.skripsi.backend_api.utils.SumberData;
 import com.skripsi.backend_api.utils.TransactionCodeGenerator;
@@ -50,6 +51,7 @@ public class TransactionService {
     private final ExcelImportLogService excelImportLogService;
     private final StokMutasiRepository stokMutasiRepository;
     private final TransactionCodeGenerator transactionCodeGenerator;
+    private final StokMutasiService stokMutasiService;
 
     public Page<TransactionRes> findAllPage(LocalDate tglAwal, LocalDate tglAkhir, Integer page, Integer size) {
         log.info("[Start service findAllPage Transaction]");
@@ -82,17 +84,14 @@ public class TransactionService {
      */
     @Transactional
     public ExcelImportLogRes importFromExcel(MultipartFile file) {
-
         log.info("Starting Import Transaksi From Excel");
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("File is required");
         }
-
         String currentUsername = authContext.getCurrentUsername();
         User importer = currentUsername == null
                 ? null
                 : userRepository.findByUsername(currentUsername).orElse(null);
-
         ExcelImportLog importLog = ExcelImportLog.builder()
                 .fileName(file.getOriginalFilename())
                 .fileSize(file.getSize())
@@ -102,47 +101,29 @@ public class TransactionService {
                 .importedBy(importer)
                 .status(Status.PROCESSING)
                 .build();
-
         importLog = excelImportLogRepository.save(importLog);
-
         List<String> errors = new ArrayList<>();
         int success = 0;
         int failed = 0;
-
         try (InputStream is = file.getInputStream();
                 Workbook workbook = WorkbookFactory.create(is)) {
-
             Sheet sheet = workbook.getSheetAt(0);
             DataFormatter formatter = new DataFormatter();
-
             Row headerRow = sheet.getRow(0);
             if (headerRow == null) {
                 throw new IllegalArgumentException("Header row is missing");
             }
-
-            // Baca header → map nama kolom ke index kolom
             Map<String, Integer> headers = new HashMap<>();
             for (Cell cell : headerRow) {
                 String key = formatter.formatCellValue(cell).trim().toLowerCase();
                 headers.put(key, cell.getColumnIndex());
             }
-
-            // Validasi kolom wajib ada
             validateHeaders(headers);
-
-            // Map kodeTransaksi -> Transaction (supaya satu transaksi tidak di-save
-            // berkali-kali)
             Map<String, Transaction> transactionMap = new LinkedHashMap<>();
-
             for (int i = 1; i <= sheet.getLastRowNum(); i++) {
                 Row row = sheet.getRow(i);
-                if (row == null)
+                if (row == null || isRowEmpty(row, formatter))
                     continue;
-
-                // Cek apakah baris benar-benar kosong
-                if (isRowEmpty(row, formatter))
-                    continue;
-
                 try {
                     String kodeTransaksiRaw = getCellValue(row, headers, formatter, "kode_transaksi");
                     String kodeProdukRaw = getCellValue(row, headers, formatter, "kode_produk");
@@ -150,32 +131,22 @@ public class TransactionService {
                     String jumlahRaw = getCellValue(row, headers, formatter, "jumlah");
                     String hargaSatuanRaw = getCellValue(row, headers, formatter, "harga_satuan");
                     String catatan = getCellValue(row, headers, formatter, "catatan");
-
-                    // Validasi field wajib
                     if (kodeTransaksiRaw == null || kodeTransaksiRaw.isBlank())
                         throw new IllegalArgumentException("kode_transaksi wajib diisi");
                     if (transactionDateRaw == null || transactionDateRaw.isBlank())
                         throw new IllegalArgumentException("transaction_date wajib diisi");
                     if (kodeProdukRaw == null || kodeProdukRaw.isBlank())
                         throw new IllegalArgumentException("kode_produk wajib diisi");
-
                     final String kodeTransaksi = kodeTransaksiRaw.trim();
                     final String kodeProduk = kodeProdukRaw.trim();
-
                     LocalDate transactionDate = parseDate(transactionDateRaw.trim());
                     int jumlah = parseIntegerValue(jumlahRaw, 1);
                     BigDecimal hargaSatuan = parseBigDecimal(hargaSatuanRaw, BigDecimal.ZERO);
                     BigDecimal subtotal = hargaSatuan.multiply(BigDecimal.valueOf(jumlah));
-
-                    // Cari produk berdasarkan kode_produk
                     Product product = productRepository.findByKodeProduk(kodeProduk)
-                            .orElseThrow(() -> new IllegalArgumentException(
-                                    "Produk tidak ditemukan: " + kodeProduk));
-
-                    // Ambil atau buat transaksi
+                            .orElseThrow(() -> new IllegalArgumentException("Produk tidak ditemukan: " + kodeProduk));
                     Transaction transaction = transactionMap.get(kodeTransaksi);
                     if (transaction == null) {
-                        // Cek apakah sudah ada di database; jika sudah ada, tambahkan detail saja
                         transaction = transactionRepository.findByKodeTransaksi(kodeTransaksi)
                                 .orElseGet(() -> Transaction.builder()
                                         .kodeTransaksi(kodeTransaksi)
@@ -187,33 +158,39 @@ public class TransactionService {
                                         .build());
                         transactionMap.put(kodeTransaksi, transaction);
                     }
-
-                    // Tambah detail ke transaksi
                     TransactionDetail detail = TransactionDetail.builder()
                             .jumlah(jumlah)
                             .hargaSatuan(hargaSatuan)
                             .subtotal(subtotal)
                             .produk(product)
                             .build();
-
                     transaction.addDetail(detail);
-                    // Akumulasi total harga
                     transaction.setTotalHarga(transaction.getTotalHarga().add(subtotal));
-
+                    // Perbarui stok produk dan simpan mutasi
+                    int stokSebelum = product.getStokTersedia();
+                    int stokSesudah = Math.max(0, stokSebelum - jumlah);
+                    product.setStokTersedia(stokSesudah);
+                    productRepository.save(product);
                     success++;
-
                 } catch (Exception e) {
                     failed++;
                     errors.add("Baris " + (i + 1) + ": " + e.getMessage());
                     log.warn("Import transaksi - baris {} gagal: {}", i + 1, e.getMessage());
                 }
             }
-
-            // Simpan semua transaksi beserta detail-nya
+            // Simpan transaksi dan catat mutasi stok per-detail
             for (Transaction trx : transactionMap.values()) {
-                transactionRepository.save(trx);
+                Transaction savedTrx = transactionRepository.save(trx);
+                for (TransactionDetail detail : savedTrx.getDetails()) {
+                    Product p = detail.getProduk();
+                    int qty = detail.getJumlah();
+                    // Catat log mutasi penjualan via StokMutasiService
+                    stokMutasiService.recordMutasiDetail(
+                            p, detail, Status.KELUAR.name(), qty,
+                            p.getStokTersedia() + qty, p.getStokTersedia(),
+                            "Penjualan Import Excel: " + trx.getKodeTransaksi());
+                }
             }
-
             importLog.setTotalRows(success + failed);
             importLog.setRowsSuccess(success);
             importLog.setRowsFailed(failed);
@@ -222,11 +199,9 @@ public class TransactionService {
                     ? Status.SUCCESS
                     : (success == 0 ? Status.FAILED : Status.PARTIAL));
             importLog.setImportedBy(importer);
-
             ExcelImportLog saved = excelImportLogRepository.save(importLog);
             log.info("Import transaksi selesai - success={}, failed={}", success, failed);
             return excelImportLogService.toResponse(saved);
-
         } catch (Exception e) {
             importLog.setStatus(Status.FAILED);
             importLog.setErrorDetail(e.getMessage());
@@ -246,7 +221,8 @@ public class TransactionService {
 
         for (TransactionDetailReq detailReq : req.getDetails()) {
             Product product = productRepository.findByKodeProduk(detailReq.getKodeProduk())
-                    .orElseThrow(() -> new IllegalArgumentException("Produk tidak ditemukan: " + detailReq.getKodeProduk()));
+                    .orElseThrow(
+                            () -> new IllegalArgumentException("Produk tidak ditemukan: " + detailReq.getKodeProduk()));
 
             BigDecimal hargaSatuan = detailReq.getHargaSatuan() != null
                     ? detailReq.getHargaSatuan()
@@ -281,7 +257,6 @@ public class TransactionService {
     public TransactionRes createTransaction(TransactionReq req) {
         LocalDate transactionDate = req.getTransactionDate() != null ? req.getTransactionDate() : LocalDate.now();
         String generatedKodeTransaksi = transactionCodeGenerator.generate(transactionDate);
-
         Transaction transaction = Transaction.builder()
                 .kodeTransaksi(generatedKodeTransaksi)
                 .transactionDate(transactionDate)
@@ -289,149 +264,143 @@ public class TransactionService {
                 .sumberData(SumberData.manual)
                 .totalHarga(BigDecimal.ZERO)
                 .build();
-
         String currentUsername = authContext.getCurrentUsername();
         if (currentUsername != null) {
             transaction.setImportedBy(userRepository.findByUsername(currentUsername).orElse(null));
         }
-
         BigDecimal total = BigDecimal.ZERO;
-        List<StokMutasi> stokMutasiList = new ArrayList<>();
-
         for (TransactionDetailReq detailReq : req.getDetails()) {
             Product product = productRepository.findByKodeProduk(detailReq.getKodeProduk())
-                    .orElseThrow(() -> new IllegalArgumentException("Produk tidak ditemukan: " + detailReq.getKodeProduk()));
-
+                    .orElseThrow(
+                            () -> new IllegalArgumentException("Produk tidak ditemukan: " + detailReq.getKodeProduk()));
             int jumlah = detailReq.getJumlah() != null ? detailReq.getJumlah() : 1;
             if (product.getStokTersedia() < jumlah) {
                 throw new IllegalArgumentException("Stok tidak mencukupi untuk produk: " + product.getNamaProduk());
             }
-
-            BigDecimal hargaSatuan = detailReq.getHargaSatuan() != null ? detailReq.getHargaSatuan() : product.getHarga();
+            BigDecimal hargaSatuan = detailReq.getHargaSatuan() != null ? detailReq.getHargaSatuan()
+                    : product.getHarga();
             BigDecimal subtotal = hargaSatuan.multiply(BigDecimal.valueOf(jumlah));
-
             TransactionDetail detail = TransactionDetail.builder()
                     .produk(product)
                     .jumlah(jumlah)
                     .hargaSatuan(hargaSatuan)
                     .subtotal(subtotal)
                     .build();
-
             transaction.addDetail(detail);
             total = total.add(subtotal);
-
+            // Perbarui stok produk
             int stokSebelum = product.getStokTersedia();
             int stokSesudah = stokSebelum - jumlah;
             product.setStokTersedia(stokSesudah);
             productRepository.save(product);
-
-            stokMutasiList.add(StokMutasi.builder()
-                    .produk(product)
-                    .transaksiDetail(detail)
-                    .tipe(Status.KELUAR.name())
-                    .qty(jumlah)
-                    .stokSebelum(stokSebelum)
-                    .stokSesudah(stokSesudah)
-                    .keterangan("Penjualan pada Transaksi " + generatedKodeTransaksi)
-                    .build());
         }
-
         transaction.setTotalHarga(total);
         Transaction savedTransaction = transactionRepository.save(transaction);
-
-        for (StokMutasi mutasi : stokMutasiList) {
-            stokMutasiRepository.save(mutasi);
+        // Catat mutasi stok via StokMutasiService
+        for (TransactionDetail detail : savedTransaction.getDetails()) {
+            Product product = detail.getProduk();
+            int jumlah = detail.getJumlah();
+            int stokSesudah = product.getStokTersedia();
+            int stokSebelum = stokSesudah + jumlah;
+            stokMutasiService.recordMutasiDetail(
+                    product, detail, Status.KELUAR.name(), jumlah,
+                    stokSebelum, stokSesudah,
+                    "Penjualan pada Transaksi " + generatedKodeTransaksi);
         }
-
         return toResponse(savedTransaction);
     }
 
-    // -- METHOD UPDATE --
     @Transactional
     public Transaction updateTransaction(Long id, TransactionReq req) {
         Transaction transaction = transactionRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Transaksi tidak ditemukan"));
-        // Kode Transaksi tidak boleh berubah, kita lewati req.getKodeTransaksi().
         if (req.getTransactionDate() != null) {
             transaction.setTransactionDate(req.getTransactionDate());
         }
         transaction.setCatatan(req.getCatatan());
-        // Map existing detail by ID
         Map<Long, TransactionDetail> existingDetailsMap = new HashMap<>();
         for (TransactionDetail td : transaction.getDetails()) {
             existingDetailsMap.put(td.getId(), td);
         }
         BigDecimal newTotal = BigDecimal.ZERO;
-        List<TransactionDetail> updatedDetails = new ArrayList<>();
         for (TransactionDetailReq detailReq : req.getDetails()) {
             Product reqProduct = productRepository.findByKodeProduk(detailReq.getKodeProduk())
                     .orElseThrow(
                             () -> new IllegalArgumentException("Produk tidak ditemukan: " + detailReq.getKodeProduk()));
-
             BigDecimal reqHargaSatuan = detailReq.getHargaSatuan() != null ? detailReq.getHargaSatuan()
                     : reqProduct.getHarga();
             BigDecimal reqSubtotal = reqHargaSatuan.multiply(BigDecimal.valueOf(detailReq.getJumlah()));
             if (detailReq.getId() != null && existingDetailsMap.containsKey(detailReq.getId())) {
-                // Update existing detail
                 TransactionDetail existingDetail = existingDetailsMap.get(detailReq.getId());
-
                 Product oldProduct = existingDetail.getProduk();
                 int oldJumlah = existingDetail.getJumlah();
                 int newJumlah = detailReq.getJumlah();
-                // Bermain dengan perhitungan mutasi: Jika produknya sama vs produknya berubah
                 if (oldProduct.getId().equals(reqProduct.getId())) {
-                    int selisih = newJumlah - oldJumlah; // positif = tambah beli, negatif = kurangi beli
+                    int selisih = newJumlah - oldJumlah;
                     if (selisih > 0) {
+                        // Beli lebih banyak -> stok berkurang
                         if (reqProduct.getStokTersedia() < selisih) {
                             throw new IllegalArgumentException(
                                     "Stok tidak mencukupi untuk update qty produk: " + reqProduct.getNamaProduk());
                         }
                         int stokSblm = reqProduct.getStokTersedia();
-                        reqProduct.setStokTersedia(stokSblm - selisih);
-
-                        // StokMutasi Keluar lagi sebesar selisih
-                        // TODO: simpan StokMutasi setelah save
-                        existingDetail.setJumlah(newJumlah);
+                        int stokSsdh = stokSblm - selisih;
+                        reqProduct.setStokTersedia(stokSsdh);
+                        productRepository.save(reqProduct);
+                        stokMutasiService.recordMutasiDetail(
+                                reqProduct, existingDetail, Status.KELUAR.name(), selisih,
+                                stokSblm, stokSsdh, "Update Transaksi (Tambah Qty): " + transaction.getKodeTransaksi());
                     } else if (selisih < 0) {
-                        int stokSblm = reqProduct.getStokTersedia();
+                        // Beli lebih sedikit -> stok dikembalikan (refund)
                         int qtyRefund = Math.abs(selisih);
-                        reqProduct.setStokTersedia(stokSblm + qtyRefund);
-
-                        // StokMutasi Masuk/Refund sebesar selisih
-                        // TODO: simpan StokMutasi setelah save
-                        existingDetail.setJumlah(newJumlah);
+                        int stokSblm = reqProduct.getStokTersedia();
+                        int stokSsdh = stokSblm + qtyRefund;
+                        reqProduct.setStokTersedia(stokSsdh);
+                        productRepository.save(reqProduct);
+                        stokMutasiService.recordMutasiDetail(
+                                reqProduct, existingDetail, Status.REFUND.name(), qtyRefund,
+                                stokSblm, stokSsdh,
+                                "Update Transaksi (Kurangi Qty): " + transaction.getKodeTransaksi());
                     }
+                    existingDetail.setJumlah(newJumlah);
                     existingDetail.setHargaSatuan(reqHargaSatuan);
                     existingDetail.setSubtotal(reqSubtotal);
                 } else {
-                    // Produknya diganti:
-                    // 1. Kembalikan stok lama
+                    // Produk diganti: Kembalikan stok lama & Kurangi stok baru
                     int stokLamaSblm = oldProduct.getStokTersedia();
-                    oldProduct.setStokTersedia(stokLamaSblm + oldJumlah);
-                    // mutasi refund untuk oldProduct akan disave di bawah
-                    // 2. Ambil stok baru
+                    int stokLamaSsdh = stokLamaSblm + oldJumlah;
+                    oldProduct.setStokTersedia(stokLamaSsdh);
+                    productRepository.save(oldProduct);
+                    stokMutasiService.recordRefund(oldProduct, existingDetail.getId(), oldJumlah, stokLamaSblm,
+                            stokLamaSsdh, transaction.getKodeTransaksi());
                     if (reqProduct.getStokTersedia() < newJumlah) {
                         throw new IllegalArgumentException(
                                 "Stok tidak mencukupi untuk produk baru: " + reqProduct.getNamaProduk());
                     }
                     int stokBaruSblm = reqProduct.getStokTersedia();
-                    reqProduct.setStokTersedia(stokBaruSblm - newJumlah);
+                    int stokBaruSsdh = stokBaruSblm - newJumlah;
+                    reqProduct.setStokTersedia(stokBaruSsdh);
+                    productRepository.save(reqProduct);
                     existingDetail.setProduk(reqProduct);
                     existingDetail.setJumlah(newJumlah);
                     existingDetail.setHargaSatuan(reqHargaSatuan);
                     existingDetail.setSubtotal(reqSubtotal);
+                    stokMutasiService.recordMutasiDetail(
+                            reqProduct, existingDetail, Status.KELUAR.name(), newJumlah,
+                            stokBaruSblm, stokBaruSsdh,
+                            "Update Transaksi (Ganti Produk): " + transaction.getKodeTransaksi());
                 }
-                updatedDetails.add(existingDetail);
-                existingDetailsMap.remove(detailReq.getId()); // Hapus dari map yang nantinya sisa dari map akan dihapus
-                                                              // (refund full)
+                existingDetailsMap.remove(detailReq.getId());
             } else {
-                // Detail Baru ditambahkan saat update
+                // Item detail baru ditambahkan saat update transaksi
                 if (reqProduct.getStokTersedia() < detailReq.getJumlah()) {
                     throw new IllegalArgumentException(
                             "Stok tidak mencukupi untuk produk: " + reqProduct.getNamaProduk());
                 }
                 int stokSblm = reqProduct.getStokTersedia();
-                reqProduct.setStokTersedia(stokSblm - detailReq.getJumlah());
+                int stokSsdh = stokSblm - detailReq.getJumlah();
+                reqProduct.setStokTersedia(stokSsdh);
+                productRepository.save(reqProduct);
                 TransactionDetail newDetail = TransactionDetail.builder()
                         .produk(reqProduct)
                         .jumlah(detailReq.getJumlah())
@@ -439,29 +408,26 @@ public class TransactionService {
                         .subtotal(reqSubtotal)
                         .build();
                 transaction.addDetail(newDetail);
-                updatedDetails.add(newDetail);
+                stokMutasiService.recordMutasiDetail(
+                        reqProduct, newDetail, Status.KELUAR.name(), detailReq.getJumlah(),
+                        stokSblm, stokSsdh, "Update Transaksi (Item Baru): " + transaction.getKodeTransaksi());
             }
             newTotal = newTotal.add(reqSubtotal);
         }
-        // Refund detail yang terhapus
+        // Refund detail item yang dihapus pada transaksi
         for (TransactionDetail detailToRemove : existingDetailsMap.values()) {
             Product pToRemove = detailToRemove.getProduk();
+            int qtyRefund = detailToRemove.getJumlah();
             int stokSblm = pToRemove.getStokTersedia();
-            pToRemove.setStokTersedia(stokSblm + detailToRemove.getJumlah());
+            int stokSsdh = stokSblm + qtyRefund;
+            pToRemove.setStokTersedia(stokSsdh);
             productRepository.save(pToRemove);
-
-            // Simpan log refund. Perlu dipanggil sebelum transaksi detail dihapus/null
-            // Nanti di handle khusus
+            stokMutasiService.recordRefund(pToRemove, detailToRemove.getId(), qtyRefund, stokSblm, stokSsdh,
+                    transaction.getKodeTransaksi());
             transaction.removeDetail(detailToRemove);
         }
         transaction.setTotalHarga(newTotal);
         return transactionRepository.save(transaction);
-        // Catatan: Supaya ini bekerja sempurna menyimpan mutasi history per-item
-        // update,
-        // lebih baik implementasi logikanya dipecah dan disimpan per-mutasinya di dalam
-        // blok,
-        // namun untuk sementara saya simplifikasi struktur logic update-nya sesuai
-        // pemintaan.
     }
 
     // -- METHOD DELETE --
@@ -469,33 +435,28 @@ public class TransactionService {
     public void deleteTransaction(Long id) {
         Transaction transaction = transactionRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Transaksi tidak ditemukan"));
-        // Kembalikan semua stok sebelum menghapus
+        // Mengembalikan stok semua produk terkait & mencatat log REFUND via
+        // StokMutasiService
         for (TransactionDetail detail : transaction.getDetails()) {
             Product product = detail.getProduk();
             int qtyRefund = detail.getJumlah();
             int stokSebelum = product.getStokTersedia();
             int stokSesudah = stokSebelum + qtyRefund;
-            // 1. Update stok product
+            // 1. Kembalikan stok obat
             product.setStokTersedia(stokSesudah);
             productRepository.save(product);
-            // 2. Putuskan relasi Stok Mutasi lama ke transaksi detail ini agar detail bisa
-            // dihapus
-            // (Kita harus punya StokMutasiRepository di-inject di atas)
-            // stokMutasiRepository.nullifyTransaksiDetailId(detail.getId());
-            // 3. Catat history REFUND
-            StokMutasi mutasiRefund = StokMutasi.builder()
-                    .produk(product)
-                    .transaksiDetail(null) // Biarkan null karena transaksi dan detail akan musnah
-                    .tipe(Status.REFUND.name())
-                    .qty(qtyRefund)
-                    .stokSebelum(stokSebelum)
-                    .stokSesudah(stokSesudah)
-                    .keterangan("Refund/Hapus Transaksi: " + transaction.getKodeTransaksi())
-                    .build();
-            stokMutasiRepository.save(mutasiRefund);
+            // 2. Putuskan relasi FK & Catat mutasi REFUND melalui StokMutasiService
+            stokMutasiService.recordRefund(
+                    product,
+                    detail.getId(),
+                    qtyRefund,
+                    stokSebelum,
+                    stokSesudah,
+                    transaction.getKodeTransaksi());
         }
-        // 4. Hard Delete
+        // 3. Hard Delete data transaksi
         transactionRepository.delete(transaction);
+        log.info("Transaksi {} berhasil dihapus dan stok obat telah dikembalikan.", transaction.getKodeTransaksi());
     }
 
     // ─── Helper methods ──────────────────────────────────────────────────────

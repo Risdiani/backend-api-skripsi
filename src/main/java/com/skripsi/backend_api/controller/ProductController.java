@@ -2,6 +2,7 @@ package com.skripsi.backend_api.controller;
 
 import com.skripsi.backend_api.dto.BaseResponse;
 import com.skripsi.backend_api.dto.excelimportlog.response.ExcelImportLogRes;
+import com.skripsi.backend_api.dto.product.request.AddStokReq;
 import com.skripsi.backend_api.dto.product.request.ProductReq;
 import com.skripsi.backend_api.dto.product.response.ProductRes;
 import com.skripsi.backend_api.service.product.ProductService;
@@ -51,6 +52,13 @@ public class ProductController {
     public ResponseEntity<BaseResponse<Object>> create(@RequestBody ProductReq req) {
         ProductRes data = productService.create(req);
         return ResponseEntity.ok(BaseResponse.ok("Product created", data));
+    }
+
+    // Endpoint Tambah Stok Obat (via Request Body)
+    @PostMapping("/add-stock")
+    public ResponseEntity<BaseResponse<Object>> addStock(@RequestBody AddStokReq req) {
+        ProductRes data = productService.addStock(req);
+        return ResponseEntity.ok(BaseResponse.ok("Stok obat berhasil ditambahkan", data));
     }
 
     @PutMapping("/{id}")
