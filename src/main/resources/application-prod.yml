@@ -1,0 +1,36 @@
+# =============================================================
+# PRODUCTION CONFIGURATION
+# =============================================================
+
+server:
+  address: 0.0.0.0
+  port: ${PORT:8080}
+  servlet:
+    context-path: /api
+
+spring:
+
+  # -----------------------------------------------------------
+  # DATABASE — AIVEN MYSQL
+  # -----------------------------------------------------------
+  datasource:
+    url: jdbc:mysql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslMode=REQUIRED&serverTimezone=Asia/Jakarta&characterEncoding=UTF-8
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+    # ---------------------------------------------------------
+    # HikariCP
+    # ---------------------------------------------------------
+    hikari:
+      pool-name: ApoticHikariPool
+      minimum-idle: 2
+      maximum-pool-size: 5
+      idle-timeout: 300000
+      connection-timeout: 20000
+      max-lifetime: 1200000
+
+app:
+  cors:
+    allowed-origins:
+      - ${FRONTEND_URL}

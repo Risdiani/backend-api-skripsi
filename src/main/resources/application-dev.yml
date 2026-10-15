@@ -1,0 +1,38 @@
+# =============================================================
+# DEVELOPMENT CONFIGURATION
+# =============================================================
+server:
+  address: 0.0.0.0
+  port: ${PORT:8080}
+  servlet:
+    context-path: /api
+
+spring:
+
+  # -----------------------------------------------------------
+  # DATABASE — LOCAL MYSQL
+  # -----------------------------------------------------------
+  datasource:
+    url: jdbc:mysql://localhost:3306/apotik_v2?useSSL=false&serverTimezone=Asia/Jakarta&allowPublicKeyRetrieval=true&characterEncoding=UTF-8
+    username: root
+    password:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+    # ---------------------------------------------------------
+    # HikariCP
+    # ---------------------------------------------------------
+    hikari:
+      pool-name: ApoticHikariPool
+      minimum-idle: 5
+      maximum-pool-size: 20
+      idle-timeout: 300000
+      connection-timeout: 20000
+      max-lifetime: 1200000
+
+app:
+  jwt:
+    secret: db96b6811a45dee3d0c1c6170f53d83a545f2f48c47c5ca6f8e396dc5daf0d41
+  cors:
+    allowed-origins:
+      - http://localhost:5173
+      - http://localhost:3000
