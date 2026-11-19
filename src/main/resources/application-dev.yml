@@ -29,6 +29,29 @@ spring:
       connection-timeout: 20000
       max-lifetime: 1200000
 
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      client-id: larasati-main-outbox
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer   # payload sudah berupa JSON string dari outbox
+      acks: all                       # tunggu konfirmasi broker (dengan idempotence, ini wajib)
+      compression-type: lz4
+      properties:
+        enable.idempotence: true      # broker membuang duplikat akibat retry producer, urutan per partisi terjaga
+        max.in.flight.requests.per.connection: 5   # maksimum yang masih menjaga urutan saat idempotence aktif
+        linger.ms: 5
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 15000    # harus >= linger.ms + request.timeout.ms
+        max.block.ms: 5000            # jangan menggantung lama kalau broker/metadata tidak tersedia
+
+outbox:
+  poll-interval-ms: 1000
+  batch-size: 100
+  send-timeout-ms: 20000              # harus > delivery.timeout.ms agar future selalu selesai lebih dulu
+  retention-days: 7                   # baris SENT lebih tua dari ini dihapus
+  cleanup-cron: "0 0 3 * * *"
+
 app:
   jwt:
     secret: db96b6811a45dee3d0c1c6170f53d83a545f2f48c47c5ca6f8e396dc5daf0d41
